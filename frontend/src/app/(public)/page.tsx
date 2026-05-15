@@ -1,5 +1,4 @@
-import { Brand } from "@/components/brand";
-import ThemeToggle from "@/components/ui/ThemeToggle";
+import NavBar from "@/components/NavBar";
 import {
 	ArrowRight,
 	BarChart3,
@@ -47,51 +46,9 @@ export default function Home() {
 
 	return (
 		<div className="min-h-screen">
-			<header className="border-b border-border/60 backdrop-blur-md sticky top-0 z-40 bg-background/70">
-				<div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-					<Brand />
-					<nav className="hidden gap-8 md:flex">
-						<a
-							href="#features"
-							className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground"
-						>
-							Modules
-						</a>
-						<a
-							href="#how"
-							className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground"
-						>
-							Methodology
-						</a>
-					</nav>
-					<div className="flex items-center gap-2">
-						<ThemeToggle />
-						<Link
-							href={"/login"}
-							className="text-sm text-muted-foreground hover:text-foreground px-3 py-1.5"
-						>
-							Sign in
-						</Link>
-						<Link
-							href={"/signup"}
-							className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-						>
-							Open terminal <ArrowRight className="h-3.5 w-3.5" />
-						</Link>
-					</div>
-				</div>
-			</header>
-
+			<NavBar />
 			{/* Hero */}
-			<section className="relative overflow-hidden">
-				<div
-					className="absolute inset-0 -z-10 opacity-40"
-					style={{
-						backgroundImage:
-							"linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px)",
-						backgroundSize: "48px 48px",
-					}}
-				/>
+			<section className="relative overflow-hidden mt-25">
 				<div className="mx-auto max-w-7xl px-6 pt-20 pb-24">
 					<h1 className="text-5xl md:text-6xl font-semibold tracking-tight">
 						Stock intelligence with{" "}
@@ -108,16 +65,10 @@ export default function Home() {
 					</p>
 					<div className="mt-8 flex flex-wrap gap-3">
 						<Link
-							href={"/signup"}
+							href={"/login"}
 							className="inline-flex h-11 items-center gap-2 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90"
 						>
 							Launch terminal <ArrowRight className="h-4 w-4" />
-						</Link>
-						<Link
-							href={"/login"}
-							className="inline-flex h-11 items-center rounded-md border border-border px-6 text-sm hover:bg-accent"
-						>
-							I already have an account
 						</Link>
 					</div>
 				</div>
@@ -133,7 +84,7 @@ export default function Home() {
 							</h2>
 						</div>
 					</div>
-					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-border/60 border border-border">
+					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-card rounded-xl">
 						{modules.map((f) => (
 							<div
 								key={f.t}
