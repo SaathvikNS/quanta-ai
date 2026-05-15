@@ -25,7 +25,7 @@ export function Brand({ className = "" }: { className?: string }) {
 				<span className="text-sm font-semibold tracking-tight">
 					QUANTA
 				</span>
-				<span className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+				<span className="font-mono text-[9px] uppercase tracking-widest text-green">
 					Intelligence
 				</span>
 			</div>
