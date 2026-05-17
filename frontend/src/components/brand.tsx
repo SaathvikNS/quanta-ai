@@ -21,11 +21,12 @@ export function Brand({ className = "" }: { className?: string }) {
 					height={500}
 				/> */}
 			</div>
+			<div className="h-7 w-px bg-foreground" />
 			<div className="flex flex-col leading-none">
 				<span className="text-sm font-semibold tracking-tight">
 					QUANTA
 				</span>
-				<span className="font-mono text-[9px] uppercase tracking-widest text-green">
+				<span className="font-mono text-[9px] uppercase tracking-widest text-primary">
 					Intelligence
 				</span>
 			</div>
