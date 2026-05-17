@@ -1,14 +1,13 @@
 "use client";
 
 import SignOutButton from "@/components/ServerActions/signoutbutton";
-import { Button } from "@/components/ui/button";
+import { User } from "lucide-react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 
 const Dashboard = () => {
-	const router = useRouter();
 	const { data: session } = useSession();
+	const avatarSrc = session?.user?.profile?.avatarUrl || session?.user?.image;
 	console.log(session?.user);
 	return (
 		<div>
@@ -19,12 +18,17 @@ const Dashboard = () => {
 			<p>{session?.user?.name}</p>
 			<p>{session?.user?.email}</p>
 			<div className="relative w-10 h-10">
-				<Image
-					src={session?.user?.image || "/next.svg"}
-					alt="user avatar"
-					width={100}
-					height={100}
-				/>
+				{avatarSrc ? (
+					<Image
+						src={avatarSrc}
+						alt="user avatar"
+						fill
+						unoptimized
+						className="rounded-full object-cover"
+					/>
+				) : (
+					<User />
+				)}
 			</div>
 		</div>
 	);

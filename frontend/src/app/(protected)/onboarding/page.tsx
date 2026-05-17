@@ -1,31 +1,30 @@
-"use client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
+import OnBoardingClientForm from "./OnBoardingClientForm";
 
-import { completeOnboarding } from "@/components/ServerActions/CompleteOnboarding";
-import { Button } from "@/components/ui/button";
-import { signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+export default async function OnBoardingPage() {
+	const session = await getServerSession(authOptions);
 
-const OnBoardingPage = () => {
-	const router = useRouter();
+	const POLYGON_API_KEY = process.env.POLYGON_API_KEY;
 
-	return (
-		<div className="h-dvh w-dvw flex justify-center">
-			<div className="absolute right-5 top-5">
-				<Button
-					variant={"destructive"}
-					onClick={() => {
-						signOut();
-					}}
-				>
-					Sign Out
-				</Button>
-			</div>
-			<h1 className="text-4xl font-extrabold text-accent">
-				lets start the onnboarding process <br />
-				<Button>set onboarding</Button>
-			</h1>
-		</div>
-	);
-};
+	if (!POLYGON_API_KEY) {
+		throw new Error("Polygon API Key Missing.");
+	}
 
-export default OnBoardingPage;
+	if (!session?.user?.email) {
+		redirect("/login");
+	}
+
+	const user = await prisma.user.findUnique({
+		where: { email: session.user.email },
+		select: { onBoarded: true },
+	});
+
+	if (user?.onBoarded) {
+		redirect("/dashboard");
+	}
+
+	return <OnBoardingClientForm />;
+}

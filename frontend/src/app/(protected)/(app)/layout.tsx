@@ -9,6 +9,11 @@ const ProtectedAppLayout = async ({
 	children: React.ReactNode;
 }) => {
 	const session = await getServerSession(authOptions);
+
+	if (!session || !session.user?.email) {
+		redirect("/login");
+	}
+
 	const user = await prisma.user.findUnique({
 		where: { email: session!.user!.email! },
 		select: { onBoarded: true },

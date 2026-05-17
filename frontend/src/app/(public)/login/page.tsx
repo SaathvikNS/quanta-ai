@@ -101,7 +101,7 @@ const LogInPage = () => {
 				{authError && (
 					<Alert
 						variant={"destructive"}
-						className="absolute w-full max-w-md top-10"
+						className="fixed w-full max-w-md bottom-10 left-10"
 					>
 						<AlertCircle />
 						<AlertTitle
