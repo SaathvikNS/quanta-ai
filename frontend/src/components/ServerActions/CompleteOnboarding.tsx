@@ -1,5 +1,6 @@
 "use server";
 
+import { SearchTicker } from "@/app/(protected)/onboarding/OnBoardingClientForm";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 
@@ -7,7 +8,7 @@ interface OnboardingPayload {
 	fullName: string;
 	displayName: string;
 	avatarUrl: string | null;
-	tickers: string[];
+	tickers: SearchTicker[];
 }
 
 export async function completeOnboarding(data: OnboardingPayload) {
@@ -52,7 +53,8 @@ export async function completeOnboarding(data: OnboardingPayload) {
 			prisma.watchlist.create({
 				data: {
 					userId: user.id,
-					ticker: ticker,
+					symbol: ticker.symbol,
+					exchange: ticker.exchange,
 					notes: "Seeded during profile setup workflow.",
 				},
 			}),

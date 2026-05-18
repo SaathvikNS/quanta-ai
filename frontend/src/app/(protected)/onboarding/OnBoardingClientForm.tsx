@@ -1,3 +1,5 @@
+// src/app/(protected)/onboarding/onoardingclientform.tsx
+
 "use client";
 
 import { completeOnboarding } from "@/components/ServerActions/CompleteOnboarding";
@@ -9,13 +11,11 @@ import { useState, useEffect, useRef } from "react";
 import { X, Upload, Camera } from "lucide-react";
 import Image from "next/image";
 
-interface PolygonTickerResult {
-	ticker: string;
-	name?: string;
-	market?: string;
-	locale?: string;
-	[key: string]: unknown;
-}
+export type SearchTicker = {
+	symbol: string;
+	exchange: string;
+	name: string;
+};
 
 export default function OnBoardingPage() {
 	const router = useRouter();
@@ -28,8 +28,8 @@ export default function OnBoardingPage() {
 
 	// Ticker Search States
 	const [tickerInput, setTickerInput] = useState("");
-	const [searchResults, setSearchResults] = useState<string[]>([]);
-	const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
+	const [searchResults, setSearchResults] = useState<SearchTicker[]>([]);
+	const [selectedTickers, setSelectedTickers] = useState<SearchTicker[]>([]);
 	const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -57,53 +57,75 @@ export default function OnBoardingPage() {
 
 	// Fetch tickers in real time as the user types via our internal API proxy
 	useEffect(() => {
-		if (!tickerInput.trim()) return;
+		const trimmed = tickerInput.trim();
+
+		if (trimmed.length < 2) {
+			return;
+		}
+
+		const controller = new AbortController();
 
 		const delayDebounce = setTimeout(async () => {
 			try {
-				// Fetching from your internal Next.js API route instead of Polygon directly
-				const res = await fetch(`/api/tickers?search=${tickerInput}`);
-
-				console.log("Internal proxy response received");
+				const res = await fetch(
+					`/api/tickers?search=${encodeURIComponent(tickerInput)}`,
+					{
+						signal: controller.signal,
+					},
+				);
 
 				if (res.ok) {
 					const data = await res.json();
-					const tickers =
+
+					const tickers: SearchTicker[] =
 						data.results?.map(
-							(item: PolygonTickerResult) => item.ticker,
+							(item: {
+								symbol: string;
+								exchange: string;
+								name: string;
+							}) => ({
+								symbol: item.symbol,
+								exchange: item.exchange,
+								name: item.name,
+							}),
 						) || [];
+
 					setSearchResults(tickers);
 					setIsDropdownOpen(tickers.length > 0);
 				} else {
-					// Fallback to mock data if your server route returns an error status
 					triggerMockFallback();
 				}
 			} catch (err) {
-				console.log(err);
+				if (err instanceof DOMException && err.name === "AbortError") {
+					return;
+				}
+				console.error("Ticker fetch error:", err);
 				triggerMockFallback();
 			}
-		}, 300);
+		}, 200);
 
-		// Helper to keep the fallback dry
 		function triggerMockFallback() {
 			const mockTickers = [
-				"AAPL",
-				"MSFT",
-				"TSLA",
-				"NVDA",
-				"AMD",
-				"AMZN",
-				"GOOGL",
-				"META",
+				{ symbol: "AAPL", exchange: "mock", name: "AAPL" },
+				{ symbol: "MSFT", exchange: "mock", name: "MSFT" },
+				{ symbol: "TSLA", exchange: "mock", name: "TSLA" },
+				{ symbol: "NVDA", exchange: "mock", name: "NVDA" },
+				{ symbol: "AMD", exchange: "mock", name: "AMD" },
+				{ symbol: "AMZN", exchange: "mock", name: "AMZN" },
+				{ symbol: "GOOGL", exchange: "mock", name: "GOOGL" },
+				{ symbol: "META", exchange: "mock", name: "META" },
 			];
 			const filtered = mockTickers.filter((t) =>
-				t.includes(tickerInput.toUpperCase()),
+				t.symbol.includes(tickerInput.toUpperCase()),
 			);
 			setSearchResults(filtered);
 			setIsDropdownOpen(filtered.length > 0);
 		}
 
-		return () => clearTimeout(delayDebounce);
+		return () => {
+			controller.abort();
+			clearTimeout(delayDebounce);
+		};
 	}, [tickerInput]);
 
 	// Handle Local Image Upload to Base64 String Conversion
@@ -124,30 +146,41 @@ export default function OnBoardingPage() {
 	};
 
 	// Handle Selecting a Ticker from Dropdown List
-	const handleSelectTicker = (ticker: string) => {
-		if (selectedTickers.includes(ticker)) {
-			setTickerInput("");
-			setIsDropdownOpen(false);
-			return;
-		}
-		if (selectedTickers.length >= 3) {
-			setError("You can select a maximum of 3 tickers.");
+	const handleSelectTicker = (ticker: SearchTicker) => {
+		const alreadySelected = selectedTickers.some(
+			(t) => t.symbol === ticker.symbol && t.exchange === ticker.exchange,
+		);
+
+		if (alreadySelected) {
 			setTickerInput("");
 			setIsDropdownOpen(false);
 			return;
 		}
 
-		setSelectedTickers([...selectedTickers, ticker]);
+		if (selectedTickers.length >= 3) {
+			setError("You can select a maximum of 3 tickers.");
+			return;
+		}
+
+		setSelectedTickers((prev) => [...prev, ticker]);
+
 		setTickerInput("");
 		setIsDropdownOpen(false);
 		setError("");
 	};
 
 	// Remove Selected Ticker Capsule
-	const handleRemoveTicker = (tickerToRemove: string) => {
-		setSelectedTickers(selectedTickers.filter((t) => t !== tickerToRemove));
+	const handleRemoveTicker = (tickerToRemove: SearchTicker) => {
+		setSelectedTickers((prev) =>
+			prev.filter(
+				(t) =>
+					!(
+						t.symbol === tickerToRemove.symbol &&
+						t.exchange === tickerToRemove.exchange
+					),
+			),
+		);
 	};
-
 	// Handle Form Processing
 	const handleSubmitProfile = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -307,18 +340,33 @@ export default function OnBoardingPage() {
 							<div className="absolute left-0 right-0 top-[102%] bg-background border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto z-50">
 								{searchResults.map((ticker) => (
 									<div
-										key={ticker}
+										key={`${ticker.symbol}-${ticker.exchange}`}
 										onClick={() =>
 											handleSelectTicker(ticker)
 										}
 										className="px-4 py-2.5 hover:bg-muted text-sm font-semibold text-foreground cursor-pointer transition-colors flex justify-between items-center"
 									>
-										<span>{ticker}</span>
-										{selectedTickers.includes(ticker) && (
-											<span className="text-xs text-primary font-medium">
-												Added
+										<div className="flex flex-col">
+											<span>{ticker.symbol}</span>
+											<span className="text-xs text-muted-foreground">
+												{ticker.name}
 											</span>
-										)}
+										</div>
+
+										<span className="text-[10px] text-muted-foreground flex flex-col items-end">
+											{ticker.exchange}
+											{selectedTickers.some(
+												(t) =>
+													t.symbol ===
+														ticker.symbol &&
+													t.exchange ===
+														ticker.exchange,
+											) && (
+												<span className="text-primary font-medium">
+													Added
+												</span>
+											)}{" "}
+										</span>
 									</div>
 								))}
 							</div>
@@ -329,10 +377,15 @@ export default function OnBoardingPage() {
 							<div className="flex flex-wrap gap-2 pt-2">
 								{selectedTickers.map((ticker) => (
 									<div
-										key={ticker}
+										key={`${ticker.symbol}-${ticker.exchange}`}
 										className="flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 px-3 py-1 rounded-full text-xs font-bold tracking-wide"
 									>
-										<span>{ticker}</span>
+										<span>
+											{ticker.symbol}
+											<span className="ml-1 text-[10px] opacity-70">
+												({ticker.exchange})
+											</span>
+										</span>
 										<button
 											type="button"
 											onClick={() =>

@@ -1,34 +1,64 @@
 // src/app/api/tickers/route.ts
+
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const search = searchParams.get("search");
+	try {
+		const { searchParams } = new URL(request.url);
 
-    if (!search) {
-        return NextResponse.json({ results: [] });
-    }
+		const search = searchParams
+			.get("search")
+			?.trim();
 
-    // Safely pull the key on the server side
-    const apiKey = process.env.POLYGON_API_KEY;
+		if (!search) {
+			return NextResponse.json({ results: [] });
+		}
 
-    if (!apiKey) {
-        return NextResponse.json({ error: "API Key Configuration Missing" }, { status: 500 });
-    }
+		const apiKey = process.env.TD_API_KEY;
 
-    try {
-        const res = await fetch(
-            `https://api.polygon.io/v3/reference/tickers?search=${search}&active=true&limit=5&apiKey=${apiKey}`
-        );
+		if (!apiKey) {
+			return NextResponse.json(
+				{ error: "Missing API key" },
+				{ status: 500 },
+			);
+		}
 
-        if (!res.ok) {
-            return NextResponse.json({ error: "Failed to fetch from Polygon" }, { status: res.status });
-        }
+		const res = await fetch(
+			`https://api.twelvedata.com/symbol_search?symbol=${encodeURIComponent(search)}&outputsize=8&apikey=${apiKey}`,
+			{
+				cache: "no-store",
+			},
+		);
 
-        const data = await res.json();
-        return NextResponse.json(data);
-    } catch (err) {
-        console.error("Polygon proxy error:", err);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
-    }
+		if (!res.ok) {
+			throw new Error(`TwelveData error: ${res.status}`);
+		}
+
+		const data = await res.json();
+
+		const results = (data.data || []).map(
+			(item: {
+				symbol: string;
+				instrument_name: string;
+				exchange: string;
+				country: string;
+				instrument_type: string;
+			}) => ({
+				symbol: item.symbol,
+				name: item.instrument_name,
+				exchange: item.exchange,
+				country: item.country,
+				type: item.instrument_type,
+			}),
+		);
+
+		return NextResponse.json({ results });
+	} catch (err) {
+		console.error(err);
+
+		return NextResponse.json(
+			{ error: "Ticker search failed" },
+			{ status: 500 },
+		);
+	}
 }
