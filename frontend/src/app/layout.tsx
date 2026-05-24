@@ -68,7 +68,9 @@ export default function RootLayout({
 				"font-sans",
 				inter.variable,
 			)}
+			suppressHydrationWarning
 		>
+			<head />
 			<body className="min-h-full flex flex-col">
 				<Providers>{children}</Providers>
 			</body>

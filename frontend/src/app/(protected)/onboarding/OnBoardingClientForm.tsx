@@ -6,10 +6,10 @@ import { completeOnboarding } from "@/components/ServerActions/CompleteOnboardin
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { signOut, useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { X, Upload, Camera } from "lucide-react";
+import { X, Camera, Upload, Loader2 } from "lucide-react";
 import Image from "next/image";
+import { useUploadThing } from "@/utils/uploadingthing";
 
 export type SearchTicker = {
 	symbol: string;
@@ -18,13 +18,16 @@ export type SearchTicker = {
 };
 
 export default function OnBoardingPage() {
-	const router = useRouter();
 	const { data: session } = useSession();
 
 	// Profile Data States
 	const [fullName, setFullName] = useState("");
 	const [displayName, setDisplayName] = useState("");
-	const [avatar, setAvatar] = useState<string | null>(null);
+	const { startUpload } = useUploadThing("imageUploader");
+	const [isUploadingImage, setIsUploadingImage] = useState(false);
+	const providerImage = session?.user?.image ?? null;
+
+	const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
 	// Ticker Search States
 	const [tickerInput, setTickerInput] = useState("");
@@ -39,6 +42,29 @@ export default function OnBoardingPage() {
 
 	// Automatically fill the email view read-only from session if available
 	const userEmail = session?.user?.email || "loading...";
+
+	const handleImageUpload = async (
+		e: React.ChangeEvent<HTMLInputElement>,
+	) => {
+		const file = e.target.files?.[0];
+
+		if (!file) return;
+
+		try {
+			setIsUploadingImage(true);
+
+			const res = await startUpload([file]);
+
+			if (res?.[0]?.url) {
+				setAvatarUrl(res[0].url);
+			}
+		} catch (err) {
+			console.error(err);
+			setError("Failed to upload image.");
+		} finally {
+			setIsUploadingImage(false);
+		}
+	};
 
 	// Handle Closing Search Dropdown when clicking outside
 	useEffect(() => {
@@ -128,23 +154,6 @@ export default function OnBoardingPage() {
 		};
 	}, [tickerInput]);
 
-	// Handle Local Image Upload to Base64 String Conversion
-	const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const file = e.target.files?.[0];
-		if (!file) return;
-
-		if (file.size > 2 * 1024 * 1024) {
-			setError("Image size must be less than 2MB");
-			return;
-		}
-
-		const reader = new FileReader();
-		reader.onloadend = () => {
-			setAvatar(reader.result as string);
-		};
-		reader.readAsDataURL(file);
-	};
-
 	// Handle Selecting a Ticker from Dropdown List
 	const handleSelectTicker = (ticker: SearchTicker) => {
 		const alreadySelected = selectedTickers.some(
@@ -196,16 +205,20 @@ export default function OnBoardingPage() {
 			await completeOnboarding({
 				fullName,
 				displayName,
-				avatarUrl: avatar,
+				avatarUrl,
 				tickers: selectedTickers,
 			});
 
-			router.replace("/dashboard");
+			window.location.replace("/dashboard");
 		} catch (err) {
 			console.error(err);
-			setError(
-				"Failed to save your workspace profile. Please try again.",
-			);
+
+			if (err instanceof Error) {
+				setError(err.message);
+			} else {
+				setError("Failed to save your workspace profile.");
+			}
+
 			setLoading(false);
 		}
 	};
@@ -233,11 +246,13 @@ export default function OnBoardingPage() {
 
 				<form onSubmit={handleSubmitProfile} className="space-y-6">
 					{/* Interactive Avatar Upload Node */}
-					<div className="flex flex-col items-center justify-center space-y-3">
+					<div className="flex flex-col items-center gap-3">
 						<div className="relative group h-24 w-24 rounded-full overflow-hidden bg-background border-2 border-border flex items-center justify-center shadow-inner">
-							{avatar ? (
+							{isUploadingImage ? (
+								<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+							) : avatarUrl || providerImage ? (
 								<Image
-									src={avatar}
+									src={avatarUrl || providerImage || ""}
 									width={100}
 									height={100}
 									alt="Avatar Profile"
@@ -246,9 +261,10 @@ export default function OnBoardingPage() {
 							) : (
 								<Camera className="h-8 w-8 text-muted-foreground" />
 							)}
+
 							<label className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px] text-white font-medium">
 								<Upload className="h-4 w-4 mb-1" />
-								Upload Photo
+								Change
 								<input
 									type="file"
 									accept="image/*"
@@ -256,10 +272,7 @@ export default function OnBoardingPage() {
 									onChange={handleImageUpload}
 								/>
 							</label>
-						</div>
-						<span className="text-xs text-muted-foreground">
-							Custom avatar image (Max 2MB)
-						</span>
+						</div>{" "}
 					</div>
 
 					{/* Personal Information Grid */}

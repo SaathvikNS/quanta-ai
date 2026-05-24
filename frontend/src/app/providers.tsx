@@ -1,12 +1,16 @@
 "use client";
 
-import { ThemeProvider } from "@/components/ThemeProvider";
+import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SessionProvider } from "next-auth/react";
 
 const Providers = ({ children }: { children: React.ReactNode }) => {
 	return (
-		<ThemeProvider>
+		<ThemeProvider
+			attribute="class"
+			defaultTheme="dark"
+			enableSystem={false}
+		>
 			<SessionProvider>
 				<TooltipProvider>{children}</TooltipProvider>
 			</SessionProvider>

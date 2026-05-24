@@ -7,8 +7,8 @@ import Image from "next/image";
 
 const Dashboard = () => {
 	const { data: session } = useSession();
-	const avatarSrc = session?.user?.profile?.avatarUrl || session?.user?.image;
-	console.log(session?.user);
+	const avatarSrc =
+		typeof session?.user?.image === "string" ? session.user.image : null;
 	return (
 		<div>
 			<nav>this is the nav bar</nav>
@@ -23,7 +23,7 @@ const Dashboard = () => {
 						src={avatarSrc}
 						alt="user avatar"
 						fill
-						unoptimized
+						sizes="a"
 						className="rounded-full object-cover"
 					/>
 				) : (
