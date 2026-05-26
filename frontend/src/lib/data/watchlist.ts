@@ -37,3 +37,20 @@ export async function getWatchlist(userId: string): Promise<WatchlistItem[]> {
 
 	return watchlist;
 }
+
+export async function removeWatchlistItem(
+	userId: string,
+	symbol: string,
+	exchange: string,
+) {
+	if (!userId || !symbol || !exchange)
+		throw new Error("Missing required fields");
+
+	return await prisma.watchlist.deleteMany({
+		where: {
+			userId,
+			symbol,
+			exchange,
+		},
+	});
+}
