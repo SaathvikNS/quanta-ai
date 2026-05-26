@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Search,
 	Star,
@@ -18,7 +18,9 @@ import { Brand } from "@/components/brand";
 import SignOutButton from "@/components/ServerActions/signoutbutton";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
-import { getWatchlist } from "@/lib/data/watchlist";
+import { getWatchlist, removeWatchlistItem } from "@/lib/data/watchlist";
+import ThemeToggle from "@/components/ui/ThemeToggle";
+import { SearchTicker } from "../../onboarding/OnBoardingClientForm";
 
 type Signal = "bullish" | "bearish" | "neutral";
 type RiskLevel = "low" | "medium" | "high";
@@ -130,8 +132,104 @@ export default function DashboardPage() {
 
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [search, setSearch] = useState("");
+	const [searchResults, setSearchResults] = useState<SearchTicker[]>([]);
+	const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+	const dropdownRef = useRef<HTMLDivElement>(null);
 
 	const prediction = useMemo(() => mockPrediction, []);
+
+	useEffect(() => {
+		function handleClickOutside(event: MouseEvent) {
+			if (
+				dropdownRef.current &&
+				!dropdownRef.current.contains(event.target as Node)
+			) {
+				setIsDropdownOpen(false);
+			}
+		}
+		document.addEventListener("mousedown", handleClickOutside);
+		return () =>
+			document.removeEventListener("mousedown", handleClickOutside);
+	}, []);
+
+	useEffect(() => {
+		const trimmed = search.trim();
+
+		if (trimmed.length < 2) {
+			return;
+		}
+
+		const controller = new AbortController();
+
+		const delayDebounce = setTimeout(async () => {
+			try {
+				const res = await fetch(
+					`/api/tickers?search=${encodeURIComponent(search)}`,
+					{
+						signal: controller.signal,
+					},
+				);
+
+				if (res.ok) {
+					const data = await res.json();
+
+					const tickers: SearchTicker[] =
+						data.results?.map(
+							(item: {
+								symbol: string;
+								exchange: string;
+								name: string;
+							}) => ({
+								symbol: item.symbol,
+								exchange: item.exchange,
+								name: item.name,
+							}),
+						) || [];
+
+					setSearchResults(tickers);
+					setIsDropdownOpen(tickers.length > 0);
+				}
+			} catch (err) {
+				if (err instanceof DOMException && err.name === "AbortError") {
+					return;
+				}
+				console.error("Ticker fetch error:", err);
+			}
+		}, 200);
+
+		return () => {
+			controller.abort();
+			clearTimeout(delayDebounce);
+		};
+	}, [search]);
+
+	const handleSelectTicker = (ticker: SearchTicker) => {
+		console.log("Selected ticker:", ticker);
+		// TODO
+		// e.g., router.push(`/dashboard/ticker/${ticker.symbol}`)
+		// or adding it to an active view state
+		setSearch("");
+		setIsDropdownOpen(false);
+	};
+
+	const handleRemove = async (symbol: string, exchange: string) => {
+		if (!session?.user.id) return;
+
+		setWatchlist((prev) =>
+			prev.filter(
+				(item) =>
+					!(item.symbol === symbol && item.exchange === exchange),
+			),
+		);
+
+		try {
+			await removeWatchlistItem(session.user.id, symbol, exchange);
+		} catch (error) {
+			console.error("Failed to remove item: ", error);
+			const data = await getWatchlist(session.user.id);
+			setWatchlist(data);
+		}
+	};
 
 	return (
 		<div className="min-h-screen bg-background text-foreground">
@@ -139,7 +237,7 @@ export default function DashboardPage() {
 				{/* SIDEBAR */}
 				<aside
 					className={cn(
-						"fixed flex flex-col inset-y-0 left-0 z-50 w-72 border-r border-border bg-sidebar-accent-foreground transition-transform duration-300 lg:translate-x-0",
+						"fixed flex flex-col inset-y-0 left-0 z-50 w-72 border-r border-border bg-primary-foreground transition-transform duration-300 lg:translate-x-0",
 						sidebarOpen ? "translate-x-0" : "-translate-x-full",
 					)}
 				>
@@ -169,7 +267,7 @@ export default function DashboardPage() {
 								)}
 							</div>
 							<div>
-								<p className="font-bold text-primary text-lg tracking-wide">
+								<p className="font-bold text-primary tracking-wide">
 									{session?.user?.name}
 								</p>
 								<p className="font-bold text-muted-foreground text-xs tracking-wider">
@@ -177,44 +275,58 @@ export default function DashboardPage() {
 								</p>
 							</div>
 						</div>
+						<div className="h-px w-full bg-border mb-6"></div>
 
 						<div className="mb-6">
-							<p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
+							<p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
 								Watchlist
 							</p>
 
 							<div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
 								{loading ? (
-									<p className="text-xs text-zinc-500 animate-pulse p-2">
+									<p className="text-xs text-muted-foreground animate-pulse p-2">
 										Loading watchlist...
 									</p>
 								) : watchlist.length === 0 ? (
-									<p className="text-xs text-zinc-500 p-2">
+									<p className="text-xs text-muted-foreground p-2">
 										No items in watchlist.
 									</p>
 								) : (
 									watchlist.map((item) => (
-										<button
+										<div
 											key={`${item.symbol}-${item.exchange}`}
-											className="flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 transition hover:border-zinc-700 hover:bg-zinc-800"
+											className="flex w-full items-center justify-between rounded-lg cursor-pointer border border-border bg-background px-3 py-3 transition hover:border-border-50 hover:bg-background/20"
 										>
-											<div className="text-left">
-												<p className="font-mono text-sm font-semibold">
-													{item.symbol}
-												</p>
-												<p className="text-xs text-zinc-500">
-													{item.exchange}
-												</p>
-											</div>
-											<Star className="h-4 w-4 text-amber-400 fill-amber-400" />
-										</button>
+											<button className="flex-1 cursor-pointer">
+												<div className="text-left">
+													<p className="font-mono text-sm font-semibold">
+														{item.symbol}
+													</p>
+													<p className="text-xs text-muted-foreground">
+														{item.exchange}
+													</p>
+												</div>
+											</button>
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													handleRemove(
+														item.symbol,
+														item.exchange,
+													);
+												}}
+												className="hover:scale-110 transition-transform"
+											>
+												<Star className="h-4 w-4 text-amber-400 fill-amber-400" />
+											</button>
+										</div>
 									))
 								)}
 							</div>
 						</div>
 
 						{/* <div>
-                            <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
+                            <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
 							Alerts
                             </p>
 							
@@ -226,7 +338,8 @@ export default function DashboardPage() {
                             </div>
                         </div> */}
 					</div>
-					<div className="fixed bottom-0 w-full p-4">
+					<div className="fixed bottom-0 grid grid-cols-2 gap-3 w-full p-4">
+						<ThemeToggle variant="lg" />
 						<SignOutButton />
 					</div>
 				</aside>
@@ -234,28 +347,62 @@ export default function DashboardPage() {
 				{/* MAIN */}
 				<main className="flex-1 lg:ml-72">
 					{/* HEADER */}
-					<header className="sticky top-0 z-40 border-b border-zinc-800 bg-black/80 backdrop-blur flex justify-between">
-						<div className="flex h-16 items-center gap-4 px-4 md:px-6">
+					<header className="sticky top-0 z-40 bg-background backdrop-blur flex justify-between">
+						<div className="flex h-16 w-full items-center gap-4 px-4 md:px-6">
 							<button
 								onClick={() => setSidebarOpen(!sidebarOpen)}
-								className="rounded-lg border border-zinc-800 p-2 lg:hidden"
+								className="rounded-lg p-2 lg:hidden"
 							>
 								<Menu className="h-5 w-5" />
 							</button>
 
-							{/* SEARCH */}
-							<div className="relative w-md flex-1">
-								<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+							{/* SEARCH WRAPPER WITH REF */}
+							<div className="relative flex-1" ref={dropdownRef}>
+								<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
 								<input
 									value={search}
-									onChange={(e) => setSearch(e.target.value)}
+									onChange={(e) => {
+										const value = e.target.value;
+										setSearch(value);
+										if (!value.trim()) {
+											setSearchResults([]);
+											setIsDropdownOpen(false);
+										}
+									}}
 									placeholder="Search ticker..."
-									className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-10 pr-4 text-sm outline-none transition focus:border-zinc-600"
+									className="h-11 w-full rounded-xl border border-zinc-800 bg-card pl-10 pr-4 text-sm text-zinc-100 outline-none transition focus:border-zinc-600"
 								/>
+
+								{/* REAL-TIME TICKER RESULT DROPDOWN */}
+								{isDropdownOpen && (
+									<div className="absolute left-0 right-0 top-[105%] bg-background/98 border border-zinc-800 rounded-xl shadow-2xl max-h-60 overflow-y-auto z-50 divide-y divide-zinc-800/50">
+										{searchResults.map((ticker) => (
+											<div
+												key={`${ticker.symbol}-${ticker.exchange}`}
+												onClick={() =>
+													handleSelectTicker(ticker)
+												}
+												className="px-4 py-3 hover:bg-border/40 text-sm font-medium text-zinc-200 hover:text-white cursor-pointer transition-colors flex justify-between items-center"
+											>
+												<div className="flex flex-col">
+													<span className="font-mono font-bold tracking-wide">
+														{ticker.symbol}
+													</span>
+													<span className="text-xs text-muted-foreground line-clamp-1">
+														{ticker.name}
+													</span>
+												</div>
+												<span className="text-[10px] uppercase font-mono tracking-wider bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-700/50">
+													{ticker.exchange}
+												</span>
+											</div>
+										))}
+									</div>
+								)}
 							</div>
 
-							<button className="flex h-11 items-center gap-2 rounded-xl border border-zinc-800 px-4 text-sm transition hover:bg-zinc-900">
+							<button className="flex h-11 items-center gap-2 rounded-xl bg-primary-foreground px-4 text-sm transition hover:bg-border/50 cursor-pointer">
 								<RefreshCw className="h-4 w-4" />
 								Refresh
 							</button>
@@ -285,7 +432,7 @@ export default function DashboardPage() {
 
 								<div className="flex items-end gap-6">
 									<div>
-										<p className="text-sm text-zinc-500">
+										<p className="text-sm text-muted-foreground">
 											Current Price
 										</p>
 
@@ -319,7 +466,7 @@ export default function DashboardPage() {
 							<div className="xl:col-span-3">
 								<Card title="Price Chart">
 									<div className="flex h-100 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50">
-										<p className="text-sm text-zinc-500">
+										<p className="text-sm text-muted-foreground">
 											Replace with TradingView / Recharts
 											/ Lightweight Charts
 										</p>
@@ -395,7 +542,7 @@ export default function DashboardPage() {
 									key={label}
 									className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
 								>
-									<p className="text-xs uppercase tracking-wider text-zinc-500">
+									<p className="text-xs uppercase tracking-wider text-muted-foreground">
 										{label}
 									</p>
 
@@ -476,7 +623,7 @@ export default function DashboardPage() {
 												</span>
 											</div>
 
-											<div className="flex items-center justify-between text-xs text-zinc-500">
+											<div className="flex items-center justify-between text-xs text-muted-foreground">
 												<div className="flex items-center gap-1">
 													<Newspaper className="h-3 w-3" />
 													{news.source}
@@ -492,7 +639,7 @@ export default function DashboardPage() {
 							<Card title="Backtest Performance">
 								<div className="space-y-6">
 									<div className="flex h-55 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50">
-										<p className="text-sm text-zinc-500">
+										<p className="text-sm text-muted-foreground">
 											Replace with equity curve chart
 										</p>
 									</div>
@@ -546,7 +693,7 @@ interface MetricProps {
 function Metric({ label, value }: MetricProps) {
 	return (
 		<div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-			<p className="text-xs uppercase tracking-wider text-zinc-500">
+			<p className="text-xs uppercase tracking-wider text-muted-foreground">
 				{label}
 			</p>
 
