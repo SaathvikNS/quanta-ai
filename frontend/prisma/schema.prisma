@@ -124,6 +124,8 @@ model Watchlist {
 
   symbol   String
   exchange String
+  mic_code String
+  currency String
 
   notes String?
 

@@ -12,427 +12,437 @@ import Image from "next/image";
 import { useUploadThing } from "@/utils/uploadingthing";
 
 export type SearchTicker = {
-	symbol: string;
-	exchange: string;
-	name: string;
+  symbol: string;
+  exchange: string;
+  name: string;
+  mic_code: string;
+  currency: string;
 };
 
 export default function OnBoardingPage() {
-	const { data: session } = useSession();
+  const { data: session } = useSession();
 
-	// Profile Data States
-	const [fullName, setFullName] = useState("");
-	const [displayName, setDisplayName] = useState("");
-	const { startUpload } = useUploadThing("imageUploader");
-	const [isUploadingImage, setIsUploadingImage] = useState(false);
-	const providerImage = session?.user?.image ?? null;
+  // Profile Data States
+  const [fullName, setFullName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const { startUpload } = useUploadThing("imageUploader");
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const providerImage = session?.user?.image ?? null;
 
-	const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
-	// Ticker Search States
-	const [tickerInput, setTickerInput] = useState("");
-	const [searchResults, setSearchResults] = useState<SearchTicker[]>([]);
-	const [selectedTickers, setSelectedTickers] = useState<SearchTicker[]>([]);
-	const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-	const dropdownRef = useRef<HTMLDivElement>(null);
+  // Ticker Search States
+  const [tickerInput, setTickerInput] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchTicker[]>([]);
+  const [selectedTickers, setSelectedTickers] = useState<SearchTicker[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-	// Flow Management States
-	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState("");
+  // Flow Management States
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-	// Automatically fill the email view read-only from session if available
-	const userEmail = session?.user?.email || "loading...";
+  // Automatically fill the email view read-only from session if available
+  const userEmail = session?.user?.email || "loading...";
 
-	const handleImageUpload = async (
-		e: React.ChangeEvent<HTMLInputElement>,
-	) => {
-		const file = e.target.files?.[0];
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
 
-		if (!file) return;
+    if (!file) return;
 
-		try {
-			setIsUploadingImage(true);
+    try {
+      setIsUploadingImage(true);
 
-			const res = await startUpload([file]);
+      const res = await startUpload([file]);
 
-			if (res?.[0]?.url) {
-				setAvatarUrl(res[0].url);
-			}
-		} catch (err) {
-			console.error(err);
-			setError("Failed to upload image.");
-		} finally {
-			setIsUploadingImage(false);
-		}
-	};
+      if (res?.[0]?.ufsUrl) {
+        setAvatarUrl(res[0].ufsUrl);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to upload image.");
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
-	// Handle Closing Search Dropdown when clicking outside
-	useEffect(() => {
-		function handleClickOutside(event: MouseEvent) {
-			if (
-				dropdownRef.current &&
-				!dropdownRef.current.contains(event.target as Node)
-			) {
-				setIsDropdownOpen(false);
-			}
-		}
-		document.addEventListener("mousedown", handleClickOutside);
-		return () =>
-			document.removeEventListener("mousedown", handleClickOutside);
-	}, []);
+  // Handle Closing Search Dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () =>
+      document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-	// Fetch tickers in real time as the user types via our internal API proxy
-	useEffect(() => {
-		const trimmed = tickerInput.trim();
+  // Fetch tickers in real time as the user types via our internal API proxy
+  useEffect(() => {
+    const trimmed = tickerInput.trim();
 
-		if (trimmed.length < 2) {
-			return;
-		}
+    if (trimmed.length < 2) {
+      return;
+    }
 
-		const controller = new AbortController();
+    const controller = new AbortController();
 
-		const delayDebounce = setTimeout(async () => {
-			try {
-				const res = await fetch(
-					`/api/tickers?search=${encodeURIComponent(tickerInput)}`,
-					{
-						signal: controller.signal,
-					},
-				);
+    const delayDebounce = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/tickers?search=${encodeURIComponent(tickerInput)}`,
+          {
+            signal: controller.signal,
+          },
+        );
 
-				if (res.ok) {
-					const data = await res.json();
+        if (res.ok) {
+          const data = await res.json();
 
-					const tickers: SearchTicker[] =
-						data.results?.map(
-							(item: {
-								symbol: string;
-								exchange: string;
-								name: string;
-							}) => ({
-								symbol: item.symbol,
-								exchange: item.exchange,
-								name: item.name,
-							}),
-						) || [];
+          console.log(data);
 
-					setSearchResults(tickers);
-					setIsDropdownOpen(tickers.length > 0);
-				} else {
-					triggerMockFallback();
-				}
-			} catch (err) {
-				if (err instanceof DOMException && err.name === "AbortError") {
-					return;
-				}
-				console.error("Ticker fetch error:", err);
-				triggerMockFallback();
-			}
-		}, 200);
+          const tickers: SearchTicker[] =
+            data.results?.map(
+              (item: {
+                symbol: string;
+                exchange: string;
+                name: string;
+                mic_code: string;
+                currency: string;
+              }) => ({
+                symbol: item.symbol,
+                exchange: item.exchange,
+                name: item.name,
+                mic_code: item.mic_code,
+                currency: item.currency,
+              }),
+            ) || [];
 
-		function triggerMockFallback() {
-			const mockTickers = [
-				{ symbol: "AAPL", exchange: "mock", name: "AAPL" },
-				{ symbol: "MSFT", exchange: "mock", name: "MSFT" },
-				{ symbol: "TSLA", exchange: "mock", name: "TSLA" },
-				{ symbol: "NVDA", exchange: "mock", name: "NVDA" },
-				{ symbol: "AMD", exchange: "mock", name: "AMD" },
-				{ symbol: "AMZN", exchange: "mock", name: "AMZN" },
-				{ symbol: "GOOGL", exchange: "mock", name: "GOOGL" },
-				{ symbol: "META", exchange: "mock", name: "META" },
-			];
-			const filtered = mockTickers.filter((t) =>
-				t.symbol.includes(tickerInput.toUpperCase()),
-			);
-			setSearchResults(filtered);
-			setIsDropdownOpen(filtered.length > 0);
-		}
+          setSearchResults(tickers);
+          setIsDropdownOpen(tickers.length > 0);
+        } else {
+          triggerMockFallback();
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return;
+        }
+        console.error("Ticker fetch error:", err);
+        triggerMockFallback();
+      }
+    }, 200);
 
-		return () => {
-			controller.abort();
-			clearTimeout(delayDebounce);
-		};
-	}, [tickerInput]);
+    function triggerMockFallback() {
+      const mockTickers = [
+        { symbol: "AAPL", exchange: "mock", name: "AAPL", mic_code: "", currency: "" },
+        { symbol: "MSFT", exchange: "mock", name: "MSFT", mic_code: "", currency: "" },
+        { symbol: "TSLA", exchange: "mock", name: "TSLA", mic_code: "", currency: "" },
+        { symbol: "NVDA", exchange: "mock", name: "NVDA", mic_code: "", currency: "" },
+        { symbol: "AMD", exchange: "mock", name: "AMD", mic_code: "", currency: "" },
+        { symbol: "AMZN", exchange: "mock", name: "AMZN", mic_code: "", currency: "" },
+        { symbol: "GOOGL", exchange: "mock", name: "GOOGL", mic_code: "", currency: "" },
+        { symbol: "META", exchange: "mock", name: "META", mic_code: "", currency: "" },
+      ];
+      const filtered = mockTickers.filter((t) =>
+        t.symbol.includes(tickerInput.toUpperCase()),
+      );
+      setSearchResults(filtered);
+      setIsDropdownOpen(filtered.length > 0);
+    }
 
-	// Handle Selecting a Ticker from Dropdown List
-	const handleSelectTicker = (ticker: SearchTicker) => {
-		const alreadySelected = selectedTickers.some(
-			(t) => t.symbol === ticker.symbol && t.exchange === ticker.exchange,
-		);
+    return () => {
+      controller.abort();
+      clearTimeout(delayDebounce);
+    };
+  }, [tickerInput]);
 
-		if (alreadySelected) {
-			setTickerInput("");
-			setIsDropdownOpen(false);
-			return;
-		}
+  // Handle Selecting a Ticker from Dropdown List
+  const handleSelectTicker = (ticker: SearchTicker) => {
+    const alreadySelected = selectedTickers.some(
+      (t) => t.symbol === ticker.symbol && t.exchange === ticker.exchange,
+    );
 
-		if (selectedTickers.length >= 3) {
-			setError("You can select a maximum of 3 tickers.");
-			return;
-		}
+    if (alreadySelected) {
+      setTickerInput("");
+      setIsDropdownOpen(false);
+      return;
+    }
 
-		setSelectedTickers((prev) => [...prev, ticker]);
+    if (selectedTickers.length >= 3) {
+      setError("You can select a maximum of 3 tickers.");
+      return;
+    }
 
-		setTickerInput("");
-		setIsDropdownOpen(false);
-		setError("");
-	};
+    setSelectedTickers((prev) => [...prev, ticker]);
 
-	// Remove Selected Ticker Capsule
-	const handleRemoveTicker = (tickerToRemove: SearchTicker) => {
-		setSelectedTickers((prev) =>
-			prev.filter(
-				(t) =>
-					!(
-						t.symbol === tickerToRemove.symbol &&
-						t.exchange === tickerToRemove.exchange
-					),
-			),
-		);
-	};
-	// Handle Form Processing
-	const handleSubmitProfile = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!fullName.trim() || !displayName.trim()) {
-			setError("Please fill out your full name and display name.");
-			return;
-		}
+    setTickerInput("");
+    setIsDropdownOpen(false);
+    setError("");
+  };
 
-		setLoading(true);
-		setError("");
+  // Remove Selected Ticker Capsule
+  const handleRemoveTicker = (tickerToRemove: SearchTicker) => {
+    setSelectedTickers((prev) =>
+      prev.filter(
+        (t) =>
+          !(
+            t.symbol === tickerToRemove.symbol &&
+            t.exchange === tickerToRemove.exchange
+          ),
+      ),
+    );
+  };
+  // Handle Form Processing
+  const handleSubmitProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fullName.trim() || !displayName.trim()) {
+      setError("Please fill out your full name and display name.");
+      return;
+    }
 
-		try {
-			await completeOnboarding({
-				fullName,
-				displayName,
-				avatarUrl,
-				tickers: selectedTickers,
-			});
+    setLoading(true);
+    setError("");
 
-			window.location.replace("/dashboard");
-		} catch (err) {
-			console.error(err);
+    console.log("selectedTickers", selectedTickers);
 
-			if (err instanceof Error) {
-				setError(err.message);
-			} else {
-				setError("Failed to save your workspace profile.");
-			}
+    try {
+      await completeOnboarding({
+        fullName,
+        displayName,
+        avatarUrl,
+        tickers: selectedTickers,
+      });
 
-			setLoading(false);
-		}
-	};
+      window.location.replace("/dashboard");
+    } catch (err) {
+      console.error(err);
 
-	return (
-		<div className="min-h-screen w-screen flex justify-center items-center bg-background relative py-12 px-4 overflow-y-auto">
-			{/* Top Right Sign Out */}
-			<div className="absolute right-5 top-5">
-				<Button variant="destructive" onClick={() => signOut()}>
-					Sign Out
-				</Button>
-			</div>
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to save your workspace profile.");
+      }
 
-			{/* Profile Setup Container Card */}
-			<div className="w-full max-w-xl bg-muted p-8 rounded-2xl shadow-2xl border border-border space-y-8">
-				<div className="text-center">
-					<h1 className="text-3xl font-extrabold tracking-tight text-accent">
-						Complete Your Profile
-					</h1>
-					<p className="text-sm text-muted-foreground mt-2">
-						Set up your workspace credentials and initial asset
-						monitoring parameters.
-					</p>
-				</div>
+      setLoading(false);
+    }
+  };
 
-				<form onSubmit={handleSubmitProfile} className="space-y-6">
-					{/* Interactive Avatar Upload Node */}
-					<div className="flex flex-col items-center gap-3">
-						<div className="relative group h-24 w-24 rounded-full overflow-hidden bg-background border-2 border-border flex items-center justify-center shadow-inner">
-							{isUploadingImage ? (
-								<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-							) : avatarUrl || providerImage ? (
-								<Image
-									src={avatarUrl || providerImage || ""}
-									width={100}
-									height={100}
-									alt="Avatar Profile"
-									className="h-full w-full object-cover"
-								/>
-							) : (
-								<Camera className="h-8 w-8 text-muted-foreground" />
-							)}
+  return (
+    <div className="min-h-screen w-screen flex justify-center items-center bg-background relative py-12 px-4 overflow-y-auto">
+      {/* Top Right Sign Out */}
+      <div className="absolute right-5 top-5">
+        <Button variant="destructive" onClick={() => signOut()}>
+          Sign Out
+        </Button>
+      </div>
 
-							<label className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px] text-white font-medium">
-								<Upload className="h-4 w-4 mb-1" />
-								Change
-								<input
-									type="file"
-									accept="image/*"
-									className="hidden"
-									onChange={handleImageUpload}
-								/>
-							</label>
-						</div>{" "}
-					</div>
+      {/* Profile Setup Container Card */}
+      <div className="w-full max-w-xl bg-muted p-8 rounded-2xl shadow-2xl border border-border space-y-8">
+        <div className="text-center">
+          <h1 className="text-3xl font-extrabold tracking-tight text-accent">
+            Complete Your Profile
+          </h1>
+          <p className="text-sm text-muted-foreground mt-2">
+            Set up your workspace credentials and initial asset
+            monitoring parameters.
+          </p>
+        </div>
 
-					{/* Personal Information Grid */}
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div className="space-y-2">
-							<label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-								Full Name
-							</label>
-							<Input
-								type="text"
-								placeholder="John Doe"
-								value={fullName}
-								onChange={(e) => setFullName(e.target.value)}
-								disabled={loading}
-								className="bg-background"
-							/>
-						</div>
-						<div className="space-y-2">
-							<label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-								Display Name
-							</label>
-							<Input
-								type="text"
-								placeholder="johndoe_trader"
-								value={displayName}
-								onChange={(e) => setDisplayName(e.target.value)}
-								disabled={loading}
-								className="bg-background"
-							/>
-						</div>
-					</div>
+        <form onSubmit={handleSubmitProfile} className="space-y-6">
+          {/* Interactive Avatar Upload Node */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative group h-24 w-24 rounded-full overflow-hidden bg-background border-2 border-border flex items-center justify-center shadow-inner">
+              {isUploadingImage ? (
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              ) : avatarUrl || providerImage ? (
+                <Image
+                  src={avatarUrl || providerImage || ""}
+                  width={100}
+                  height={100}
+                  alt="Avatar Profile"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Camera className="h-8 w-8 text-muted-foreground" />
+              )}
 
-					{/* Email View Block (Read Only Verification) */}
-					<div className="space-y-2">
-						<label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-							Registered Email
-						</label>
-						<Input
-							type="email"
-							value={userEmail}
-							disabled
-							className="bg-background/50 cursor-not-allowed opacity-70"
-						/>
-					</div>
+              <label className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px] text-white font-medium">
+                <Upload className="h-4 w-4 mb-1" />
+                Change
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+              </label>
+            </div>{" "}
+          </div>
 
-					{/* Dynamic Watchlist Setup Area */}
-					<div className="space-y-2 relative" ref={dropdownRef}>
-						<label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex justify-between">
-							<span>Seed Watchlist Tickers</span>
-							<span className="text-muted-foreground normal-case font-normal">
-								{selectedTickers.length}/3 selected
-							</span>
-						</label>
+          {/* Personal Information Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Full Name
+              </label>
+              <Input
+                type="text"
+                placeholder="John Doe"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                disabled={loading}
+                className="bg-background"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Display Name
+              </label>
+              <Input
+                type="text"
+                placeholder="johndoe_trader"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                disabled={loading}
+                className="bg-background"
+              />
+            </div>
+          </div>
 
-						{/* Search Input Field */}
-						<Input
-							type="text"
-							placeholder={
-								selectedTickers.length >= 3
-									? "Maximum limit reached"
-									: "Type to search market symbols (e.g. AAPL, TSLA)..."
-							}
-							value={tickerInput}
-							onChange={(e) => {
-								const value = e.target.value;
-								setTickerInput(value);
+          {/* Email View Block (Read Only Verification) */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Registered Email
+            </label>
+            <Input
+              type="email"
+              value={userEmail}
+              disabled
+              className="bg-background/50 cursor-not-allowed opacity-70"
+            />
+          </div>
 
-								if (!value.trim()) {
-									setSearchResults([]);
-									setIsDropdownOpen(false);
-								}
-							}}
-							disabled={loading || selectedTickers.length >= 3}
-							className="bg-background"
-						/>
-						{/* Real-time Result List Dropdown */}
-						{isDropdownOpen && (
-							<div className="absolute left-0 right-0 top-[102%] bg-background border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto z-50">
-								{searchResults.map((ticker) => (
-									<div
-										key={`${ticker.symbol}-${ticker.exchange}`}
-										onClick={() =>
-											handleSelectTicker(ticker)
-										}
-										className="px-4 py-2.5 hover:bg-muted text-sm font-semibold text-foreground cursor-pointer transition-colors flex justify-between items-center"
-									>
-										<div className="flex flex-col">
-											<span>{ticker.symbol}</span>
-											<span className="text-xs text-muted-foreground">
-												{ticker.name}
-											</span>
-										</div>
+          {/* Dynamic Watchlist Setup Area */}
+          <div className="space-y-2 relative" ref={dropdownRef}>
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex justify-between">
+              <span>Seed Watchlist Tickers</span>
+              <span className="text-muted-foreground normal-case font-normal">
+                {selectedTickers.length}/3 selected
+              </span>
+            </label>
 
-										<span className="text-[10px] text-muted-foreground flex flex-col items-end">
-											{ticker.exchange}
-											{selectedTickers.some(
-												(t) =>
-													t.symbol ===
-														ticker.symbol &&
-													t.exchange ===
-														ticker.exchange,
-											) && (
-												<span className="text-primary font-medium">
-													Added
-												</span>
-											)}{" "}
-										</span>
-									</div>
-								))}
-							</div>
-						)}
+            {/* Search Input Field */}
+            <Input
+              type="text"
+              placeholder={
+                selectedTickers.length >= 3
+                  ? "Maximum limit reached"
+                  : "Type to search market symbols (e.g. AAPL, TSLA)..."
+              }
+              value={tickerInput}
+              onChange={(e) => {
+                const value = e.target.value;
+                setTickerInput(value);
 
-						{/* Selected Capsules Container */}
-						{selectedTickers.length > 0 && (
-							<div className="flex flex-wrap gap-2 pt-2">
-								{selectedTickers.map((ticker) => (
-									<div
-										key={`${ticker.symbol}-${ticker.exchange}`}
-										className="flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 px-3 py-1 rounded-full text-xs font-bold tracking-wide"
-									>
-										<span>
-											{ticker.symbol}
-											<span className="ml-1 text-[10px] opacity-70">
-												({ticker.exchange})
-											</span>
-										</span>
-										<button
-											type="button"
-											onClick={() =>
-												handleRemoveTicker(ticker)
-											}
-											className="hover:bg-primary/20 rounded-full p-0.5 transition"
-										>
-											<X className="h-3 w-3" />
-										</button>
-									</div>
-								))}
-							</div>
-						)}
-					</div>
+                if (!value.trim()) {
+                  setSearchResults([]);
+                  setIsDropdownOpen(false);
+                }
+              }}
+              disabled={loading || selectedTickers.length >= 3}
+              className="bg-background"
+            />
+            {/* Real-time Result List Dropdown */}
+            {isDropdownOpen && (
+              <div className="absolute left-0 right-0 top-[102%] bg-background border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto z-50">
+                {searchResults.map((ticker) => (
+                  <div
+                    key={`${ticker.symbol}-${ticker.exchange}`}
+                    onClick={() =>
+                      handleSelectTicker(ticker)
+                    }
+                    className="px-4 py-2.5 hover:bg-muted text-sm font-semibold text-foreground cursor-pointer transition-colors flex justify-between items-center"
+                  >
+                    <div className="flex flex-col">
+                      <span>{ticker.symbol}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {ticker.name}
+                      </span>
+                    </div>
 
-					{/* Error Alerts Display */}
-					{error && (
-						<p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 p-3 rounded-xl font-medium">
-							{error}
-						</p>
-					)}
+                    <span className="text-[10px] text-muted-foreground flex flex-col items-end">
+                      {ticker.exchange}
+                      {selectedTickers.some(
+                        (t) =>
+                          t.symbol ===
+                          ticker.symbol &&
+                          t.exchange ===
+                          ticker.exchange,
+                      ) && (
+                          <span className="text-primary font-medium">
+                            Added
+                          </span>
+                        )}{" "}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
-					{/* Form Execution Confirmation Button */}
-					<Button
-						type="submit"
-						className="w-full h-11 text-base font-bold shadow-lg"
-						disabled={loading}
-					>
-						{loading
-							? "Creating Dynamic Profile..."
-							: "Save Profile & Launch App 🚀"}
-					</Button>
-				</form>
-			</div>
-		</div>
-	);
+            {/* Selected Capsules Container */}
+            {selectedTickers.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {selectedTickers.map((ticker) => (
+                  <div
+                    key={`${ticker.symbol}-${ticker.exchange}`}
+                    className="flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 px-3 py-1 rounded-full text-xs font-bold tracking-wide"
+                  >
+                    <span>
+                      {ticker.symbol}
+                      <span className="ml-1 text-[10px] opacity-70">
+                        ({ticker.exchange})
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleRemoveTicker(ticker)
+                      }
+                      className="hover:bg-primary/20 rounded-full p-0.5 transition"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Error Alerts Display */}
+          {error && (
+            <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 p-3 rounded-xl font-medium">
+              {error}
+            </p>
+          )}
+
+          {/* Form Execution Confirmation Button */}
+          <Button
+            type="submit"
+            className="w-full h-11 text-base font-bold shadow-lg not-disabled:cursor-pointer"
+            disabled={loading || isUploadingImage}
+          >
+            {loading || isUploadingImage
+              ? "Creating Dynamic Profile..."
+              : "Save Profile & Launch App 🚀"}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
 }
