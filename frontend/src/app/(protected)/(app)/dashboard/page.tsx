@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Search,
   Star,
@@ -13,6 +13,7 @@ import {
   Menu,
   User,
   X,
+  LoaderPinwheel,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
 import SignOutButton from "@/components/ServerActions/signoutbutton";
@@ -21,85 +22,12 @@ import Image from "next/image";
 import { getWatchlist, removeWatchlistItem } from "@/lib/data/watchlist";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { SearchTicker } from "../../onboarding/OnBoardingClientForm";
-
-type Signal = "bullish" | "bearish" | "neutral";
-type RiskLevel = "low" | "medium" | "high";
-
-interface PredictionData {
-  ticker: string;
-  company: string;
-  price: number;
-  changePct: number;
-  signal: Signal;
-  confidence: number;
-  riskLevel: RiskLevel;
-  riskScore: number;
-  summary: string;
-  sentimentScore: number;
-  sentimentLabel: string;
-}
+import { ChartDataType, FundamentalsType, IndicatorsType, NewsType, ProfileType, QuoteType } from "@/types/DashboardTypes";
 
 interface WatchlistItem {
   symbol: string;
   exchange: string;
 }
-
-interface FeatureContribution {
-  feature: string;
-  contribution: number;
-}
-
-interface NewsItem {
-  title: string;
-  source: string;
-  publishedAt: string;
-  sentiment: "positive" | "negative" | "neutral";
-}
-
-const mockPrediction: PredictionData = {
-  ticker: "AAPL",
-  company: "Apple Inc.",
-  price: 213.42,
-  changePct: 2.14,
-  signal: "bullish",
-  confidence: 78,
-  riskLevel: "medium",
-  riskScore: 62,
-  summary:
-    "Momentum remains positive with strong trend continuation above moving averages. Volume expansion suggests sustained institutional participation.",
-  sentimentScore: 0.64,
-  sentimentLabel: "Positive",
-};
-
-const mockFeatures: FeatureContribution[] = [
-  { feature: "RSI", contribution: 31 },
-  { feature: "MACD", contribution: 22 },
-  { feature: "Volume", contribution: 17 },
-  { feature: "Momentum", contribution: 14 },
-  { feature: "Sentiment", contribution: 9 },
-  { feature: "Volatility", contribution: 7 },
-];
-
-const mockNews: NewsItem[] = [
-  {
-    title: "Apple expands AI initiatives across ecosystem",
-    source: "Bloomberg",
-    publishedAt: "2h ago",
-    sentiment: "positive",
-  },
-  {
-    title: "Market volatility rises ahead of Fed comments",
-    source: "Reuters",
-    publishedAt: "4h ago",
-    sentiment: "neutral",
-  },
-  {
-    title: "Tech sector sees valuation concerns",
-    source: "CNBC",
-    publishedAt: "7h ago",
-    sentiment: "negative",
-  },
-];
 
 function cn(...classes: string[]) {
   return classes.filter(Boolean).join(" ");
@@ -110,6 +38,17 @@ export default function DashboardPage() {
 
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTicker, setSelectedTicker] = useState<SearchTicker | null>(null);
+
+  const [quote, setQuote] = useState<QuoteType | null>(null);
+  const [profile, setProfile] = useState<ProfileType | null>(null);
+  const [fundamentals, setFundamentals] = useState<FundamentalsType | null>(null);
+  const [indicators, setIndicators] = useState<IndicatorsType | null>(null);
+  const [chartData, setChartData] = useState<ChartDataType | null>(null);
+  const [news, setNews] = useState<NewsType | null>(null);
+
+  const [marketLoading, setMarketLoading] = useState(false);
+
 
   useEffect(() => {
     async function fetchWatchlist() {
@@ -136,7 +75,6 @@ export default function DashboardPage() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const prediction = useMemo(() => mockPrediction, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -209,13 +147,40 @@ export default function DashboardPage() {
     };
   }, [search]);
 
-  const handleSelectTicker = (ticker: SearchTicker) => {
-    console.log("Selected ticker:", ticker);
-    // TODO
-    // e.g., router.push(`/dashboard/ticker/${ticker.symbol}`)
-    // or adding it to an active view state
+  const handleSelectTicker = async (ticker: SearchTicker) => {
+    setSelectedTicker(ticker);
     setSearch("");
     setIsDropdownOpen(false);
+    try {
+      setMarketLoading(true);
+
+      const [quoteRes, profileRes, fundamentalsRes, indicatorsRes, chartDataRes, newsRes] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/market/quote?symbol=${ticker.symbol}&xchg=${ticker.mic_code}`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/company/profile?symbol=${ticker.symbol}&xchg=${ticker.mic_code}`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/company/fundamentals?symbol=${ticker.symbol}&xchg=${ticker.mic_code}`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/market/indicators?symbol=${ticker.symbol}&xchg=${ticker.mic_code}`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/market/chart?symbol=${ticker.symbol}&xchg=${ticker.mic_code}`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/news/analysed-feed?symbol=${ticker.symbol}`),
+      ]);
+
+      const quoteData = await quoteRes.json();
+      setQuote(quoteData);
+      const profileData = await profileRes.json();
+      setProfile(profileData);
+      const fundamentalsData = await fundamentalsRes.json();
+      setFundamentals(fundamentalsData);
+      const indicatorsData = await indicatorsRes.json();
+      setIndicators(indicatorsData);
+      const chartData = await chartDataRes.json();
+      setChartData(chartData);
+      const newsData = await newsRes.json();
+      setNews(newsData);
+
+    } catch (error) {
+      console.error("Failed to select ticker: ", error);
+    } finally {
+      setMarketLoading(false);
+    }
   };
 
   const handleRemove = async (symbol: string, exchange: string) => {
@@ -416,260 +381,351 @@ export default function DashboardPage() {
           </header>
 
           {/* CONTENT */}
-          <div className="space-y-6 p-4 md:p-6">
-            {/* HERO */}
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h2 className="font-mono text-3xl font-bold">
-                      {prediction.ticker}
-                    </h2>
-
-                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-400">
-                      {prediction.signal}
-                    </span>
-                  </div>
-
-                  <p className="mt-2 text-zinc-400">
-                    {prediction.company}
-                  </p>
-                </div>
-
-                <div className="flex items-end gap-6">
+          {marketLoading ? (
+            <div className="w-full h-full flex justify-center items-center">
+              <LoaderPinwheel className="h-8 w-8 animate-spin" />
+            </div>
+          ) : quote == null ? (
+            <div className="w-full h-full flex justify-center items-center">select a ticker to get started</div>
+          ) : (
+            <div className="space-y-6 p-4 md:p-6">
+              {/* HERO */}
+              <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">
-                      Current Price
-                    </p>
+                    <div className="flex items-center gap-3">
+                      <h2 className="font-mono text-3xl font-bold">
+                        {quote?.ticker ?? "SELECT"}
+                      </h2>
 
-                    <p className="text-4xl font-bold">
-                      ${prediction.price.toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div
-                    className={cn(
-                      "flex items-center gap-1 text-lg font-semibold",
-                      prediction.changePct >= 0
-                        ? "text-emerald-400"
-                        : "text-red-400",
-                    )}
-                  >
-                    {prediction.changePct >= 0 ? (
-                      <TrendingUp className="h-5 w-5" />
-                    ) : (
-                      <TrendingDown className="h-5 w-5" />
-                    )}
-                    {prediction.changePct.toFixed(2)}%
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* GRID */}
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-4">
-              {/* PRICE CHART */}
-              <div className="xl:col-span-3">
-                <Card title="Price Chart">
-                  <div className="flex h-100 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50">
-                    <p className="text-sm text-muted-foreground">
-                      Replace with TradingView / Recharts
-                      / Lightweight Charts
-                    </p>
-                  </div>
-                </Card>
-              </div>
-
-              {/* RIGHT PANEL */}
-              <div className="space-y-6">
-                <Card title="AI Signal">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-zinc-400">
-                        Confidence
-                      </p>
-
-                      <p className="font-semibold">
-                        {prediction.confidence}%
-                      </p>
-                    </div>
-
-                    <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-                      <div
-                        className="h-full rounded-full bg-emerald-400"
-                        style={{
-                          width: `${prediction.confidence}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                </Card>
-
-                <Card title="Risk Profile">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <ShieldAlert className="h-5 w-5 text-orange-400" />
-
-                      <span className="font-semibold capitalize">
-                        {prediction.riskLevel} Risk
+                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-400">
+                        {news?.meta.ai_signal}
                       </span>
                     </div>
 
+                    <p className="mt-2 text-zinc-400">
+                      {profile?.company}
+                    </p>
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <span className="text-xs px-2 py-1 rounded bg-muted">
+                      {quote?.exchange}
+                    </span>
+
+                    <span
+                      className={cn(
+                        "text-xs px-2 py-1 rounded",
+                        quote?.marketState === "REGULAR"
+                          ? "bg-green-500/20 text-green-400"
+                          : "bg-orange-500/20 text-orange-400",
+                      )}
+                    >
+                      {quote?.marketState}
+                    </span>
+                  </div>
+
+                  <div className="flex items-end gap-6">
                     <div>
-                      <p className="mb-2 text-sm text-zinc-400">
-                        Risk Score
+                      <p className="text-sm text-muted-foreground">
+                        Current Price
                       </p>
+
+                      <p className="text-4xl font-bold">
+                        ${quote?.currency} {quote?.price}
+                      </p>
+                    </div>
+
+                    {quote?.changePct != null && (
+                      <div
+                        className={cn(
+                          "flex items-center gap-1 text-lg font-semibold",
+                          quote.changePct >= 0
+                            ? "text-emerald-400"
+                            : "text-red-400",
+                        )}
+                      >
+                        {quote.changePct >= 0 ? (
+                          <TrendingUp className="h-5 w-5" />
+                        ) : (
+                          <TrendingDown className="h-5 w-5" />
+                        )}
+                        {quote.changePct.toFixed(2)}%
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* GRID */}
+              <section className="grid grid-cols-1 gap-6 xl:grid-cols-4">
+                {/* PRICE CHART */}
+                <div className="xl:col-span-3">
+                  <Card title="Price Chart">
+                    <div className="flex h-100 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50">
+                      <p className="text-sm text-muted-foreground">
+                        Replace with TradingView / Recharts
+                        / Lightweight Charts
+                      </p>
+                    </div>
+                  </Card>
+                </div>
+
+                {/* RIGHT PANEL */}
+                <div className="space-y-6">
+                  <Card title="AI Signal">
+                    {news?.meta.aggregate_confidence && (<div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-zinc-400">
+                          Confidence
+                        </p>
+
+                        <p className="font-semibold">
+                          {news.meta.aggregate_confidence * 100}%
+                        </p>
+                      </div>
 
                       <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
                         <div
-                          className="h-full rounded-full bg-orange-400"
+                          className="h-full rounded-full bg-emerald-400"
                           style={{
-                            width: `${prediction.riskScore}%`,
+                            width: `${news.meta.aggregate_confidence * 100}%`,
                           }}
                         />
                       </div>
+                    </div>)}
+                  </Card>
+
+                  <Card title="Risk Profile">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert className="h-5 w-5 text-orange-400" />
+
+                        <span className="font-semibold capitalize">
+                          {news?.meta.risk_level} Risk
+                        </span>
+                      </div>
+
+                      <div>
+                        <p className="mb-2 text-sm text-zinc-400">
+                          Risk Score
+                        </p>
+
+                        <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+                          <div
+                            className="h-full rounded-full bg-orange-400"
+                            style={{
+                              width: `${news?.meta.risk_score}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              </section>
+
+              {/* STATS */}
+              <section className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
+                {[
+                  ["RSI", indicators?.rsi],
+                  ["MACD", indicators?.macd],
+                  ["SMA20", indicators?.sma20],
+                  ["SMA50", indicators?.sma50],
+                  ["Attribution", indicators?.atr],
+                  ["Volatility", indicators?.volatility],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
+                  >
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                      {label}
+                    </p>
+
+                    <p className="mt-3 text-2xl font-bold">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </section>
+
+              <section className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
+                <Metric
+                  label="Market Cap"
+                  value={formatCompact(quote?.marketCap)}
+                />
+
+                <Metric
+                  label="Volume"
+                  value={formatCompact(quote?.volume)}
+                />
+
+                <Metric
+                  label="Avg Volume"
+                  value={formatCompact(quote?.avgVolume)}
+                />
+
+                <Metric
+                  label="Beta"
+                  value={quote?.beta || ""}
+                />
+
+                <Metric
+                  label="52W High"
+                  value={quote?.week52High || ""}
+                />
+
+                <Metric
+                  label="52W Low"
+                  value={quote?.week52Low || ""}
+                />
+              </section>
+
+              {/* SUMMARY + FEATURES */}
+              <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <Card title="AI Summary">
+                  <div className="flex items-start gap-3">
+                    <BrainCircuit className="mt-1 h-5 w-5 text-violet-400" />
+
+                    <p className="leading-relaxed text-zinc-300">
+                      {profile?.businessSummary}
+                    </p>
+                  </div>
+                </Card>
+
+                <Card title="Feature Attribution">
+                  <div className="space-y-3 text-sm">
+                    <Row label="PE" value={fundamentals?.pe} />
+                    <Row label="Forward PE" value={fundamentals?.forwardPE} />
+                    <Row label="PB" value={fundamentals?.pb} />
+                    <Row label="PEG" value={fundamentals?.peg} />
+                    <Row label="EPS" value={fundamentals?.eps} />
+                    <Row label="ROE" value={fundamentals?.roe} />
+                  </div>              </Card>
+              </section>
+
+              {/* NEWS + BACKTEST */}
+              <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <Card title="News Sentiment">
+                  <div className="space-y-4">
+                    {news?.news_panel?.map((news) => (
+                      <div
+                        key={news.id}
+                        className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"
+                      >
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <p className="text-sm leading-relaxed">
+                            {news.headline}
+                          </p>
+
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                              news.sentiment.label.toLowerCase() ===
+                                "positive"
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : news.sentiment.label.toLowerCase() ===
+                                  "negative"
+                                  ? "bg-red-500/10 text-red-400"
+                                  : news.sentiment.label.toLowerCase() ===
+                                    "neutral"
+                                    ? "bg-zinc-700 text-zinc-300"
+                                    : "",
+                            )}
+                          >
+                            {news.sentiment.label.toLowerCase()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Newspaper className="h-3 w-3" />
+                            {news.source}
+                          </div>
+
+                          <span onClick={() => window.open(news.url, "_blank")}>{news.source}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+
+                {/*TODO*/}
+                <Card title="Backtest Performance">
+                  <div className="space-y-6">
+                    <div className="flex h-55 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50">
+                      <p className="text-sm text-muted-foreground">
+                        Replace with equity curve chart
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <Metric label="Accuracy" value="68%" />
+                      <Metric
+                        label="Bull Hit Rate"
+                        value="72%"
+                      />
+                      <Metric
+                        label="Bear Hit Rate"
+                        value="61%"
+                      />
+                      <Metric label="Signals" value="143" />
                     </div>
                   </div>
                 </Card>
-              </div>
-            </section>
 
-            {/* STATS */}
-            <section className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
-              {[
-                ["RSI", "61.2"],
-                ["MACD", "1.42"],
-                ["SMA20", "$208.12"],
-                ["SMA50", "$201.54"],
-                ["Volume", "84M"],
-                ["Volatility", "2.8%"],
-              ].map(([label, value]) => (
-                <div
-                  key={label}
-                  className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
-                >
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {label}
-                  </p>
+                <Card title="Company Information">
 
-                  <p className="mt-3 text-2xl font-bold">
-                    {value}
-                  </p>
-                </div>
-              ))}
-            </section>
+                  <div className="space-y-4">
 
-            {/* SUMMARY + FEATURES */}
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <Card title="AI Summary">
-                <div className="flex items-start gap-3">
-                  <BrainCircuit className="mt-1 h-5 w-5 text-violet-400" />
-
-                  <p className="leading-relaxed text-zinc-300">
-                    {prediction.summary}
-                  </p>
-                </div>
-              </Card>
-
-              <Card title="Feature Attribution">
-                <div className="space-y-4">
-                  {mockFeatures.map((feature) => (
-                    <div key={feature.feature}>
-                      <div className="mb-1 flex items-center justify-between text-sm">
-                        <span>{feature.feature}</span>
-                        <span>
-                          {feature.contribution}%
-                        </span>
-                      </div>
-
-                      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-                        <div
-                          className="h-full rounded-full bg-blue-400"
-                          style={{
-                            width: `${feature.contribution}%`,
-                          }}
-                        />
-                      </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Sector
+                      </p>
+                      <p>{profile?.sector}</p>
                     </div>
-                  ))}
-                </div>
-              </Card>
-            </section>
 
-            {/* NEWS + BACKTEST */}
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <Card title="News Sentiment">
-                <div className="space-y-4">
-                  {mockNews.map((news) => (
-                    <div
-                      key={news.title}
-                      className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"
-                    >
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <p className="text-sm leading-relaxed">
-                          {news.title}
-                        </p>
-
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                            news.sentiment ===
-                              "positive"
-                              ? "bg-emerald-500/10 text-emerald-400"
-                              : news.sentiment ===
-                                "negative"
-                                ? "bg-red-500/10 text-red-400"
-                                : news.sentiment ===
-                                  "neutral"
-                                  ? "bg-zinc-700 text-zinc-300"
-                                  : "",
-                          )}
-                        >
-                          {news.sentiment}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Newspaper className="h-3 w-3" />
-                          {news.source}
-                        </div>
-
-                        <span>{news.publishedAt}</span>
-                      </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Industry
+                      </p>
+                      <p>{profile?.industry}</p>
                     </div>
-                  ))}
-                </div>
-              </Card>
 
-              <Card title="Backtest Performance">
-                <div className="space-y-6">
-                  <div className="flex h-55 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50">
-                    <p className="text-sm text-muted-foreground">
-                      Replace with equity curve chart
-                    </p>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Country
+                      </p>
+                      <p>{profile?.country}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Employees
+                      </p>
+                      <p>
+                        {profile?.employees?.toLocaleString()}
+                      </p>
+                    </div>
+
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <Metric label="Accuracy" value="68%" />
-                    <Metric
-                      label="Bull Hit Rate"
-                      value="72%"
-                    />
-                    <Metric
-                      label="Bear Hit Rate"
-                      value="61%"
-                    />
-                    <Metric label="Signals" value="143" />
-                  </div>
-                </div>
-              </Card>
-            </section>
-          </div>
+                </Card>
+              </section>
+            </div>)}
         </main>
       </div>
     </div>
   );
+}
+
+function formatCompact(value?: number) {
+  if (!value) return "-";
+
+  return Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 interface CardProps {
@@ -693,7 +749,7 @@ function Card({ title, children }: CardProps) {
 
 interface MetricProps {
   label: string;
-  value: string;
+  value: string | number | null | undefined;
 }
 
 function Metric({ label, value }: MetricProps) {
@@ -704,6 +760,25 @@ function Metric({ label, value }: MetricProps) {
       </p>
 
       <p className="mt-2 text-2xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+interface RowProps {
+  label: string;
+  value: string | number | null | undefined;
+}
+
+function Row({ label, value }: RowProps) {
+  return (
+    <div className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-muted/20 transition-colors">
+      <span className="text-sm text-muted-foreground">
+        {label}
+      </span>
+
+      <span className="font-mono font-semibold">
+        {value ?? "-"}
+      </span>
     </div>
   );
 }
