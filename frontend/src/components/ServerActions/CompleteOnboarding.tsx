@@ -53,6 +53,7 @@ export async function completeOnboarding(data: OnboardingPayload) {
             userId: user.id,
             symbol: ticker.symbol,
             exchange: ticker.exchange,
+            name: ticker.symbol,
             mic_code: ticker.mic_code,
             currency: ticker.currency,
             notes: "Seeded during profile setup workflow.",

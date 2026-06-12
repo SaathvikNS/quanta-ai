@@ -60,7 +60,7 @@ export interface IndicatorsType {
   bolingerLower: number;
 }
 
-export interface CandleType {
+export interface Candle {
   time: string;
   open: number;
   high: number;
@@ -68,8 +68,6 @@ export interface CandleType {
   close: number;
   volume: number;
 }
-
-export type ChartDataType = CandleType[]
 
 interface MetaType {
   articles_analyzed: number;
@@ -97,4 +95,16 @@ export interface NewsType {
   symbol: string;
   meta: MetaType;
   news_panel: News[];
+}
+
+export interface WatchlistItem {
+  symbol: string;
+  exchange: string;
+  mic_code: string;
+  currency: string;
+}
+
+export interface ChartProps {
+  candles: Candle[];
+  indicators?: IndicatorsType;
 }

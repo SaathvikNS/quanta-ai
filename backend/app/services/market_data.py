@@ -81,7 +81,6 @@ async def calculate_indicators(symbol: str, xchg: str):
 
     rsi_series = history.ta.rsi()
     macd_df = history.ta.macd()
-    print(macd_df.describe())
     sma20 = history.ta.sma(length=20)
     sma50 = history.ta.sma(length=50)
     ema20 = history.ta.ema(length=20)
