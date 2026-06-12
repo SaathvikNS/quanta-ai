@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Star,
@@ -19,36 +19,121 @@ import { Brand } from "@/components/brand";
 import SignOutButton from "@/components/ServerActions/signoutbutton";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
-import { getWatchlist, removeWatchlistItem } from "@/lib/data/watchlist";
+import { addWatchlistItem, getWatchlist, removeWatchlistItem } from "@/lib/data/watchlist";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { SearchTicker } from "../../onboarding/OnBoardingClientForm";
-import { ChartDataType, FundamentalsType, IndicatorsType, NewsType, ProfileType, QuoteType } from "@/types/DashboardTypes";
+import { createChart, ColorType, CandlestickSeries, LineSeries } from "lightweight-charts";
 
-interface WatchlistItem {
-  symbol: string;
-  exchange: string;
-}
+import { Candle, ChartProps, FundamentalsType, IndicatorsType, NewsType, ProfileType, QuoteType, WatchlistItem } from "@/types/DashboardTypes";
+
+
 
 function cn(...classes: string[]) {
   return classes.filter(Boolean).join(" ");
 }
 
+function CandlestickChart({ candles }: ChartProps) {
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!chartRef.current || candles.length === 0) return;
+
+    const chart = createChart(chartRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor: "#71717a",
+      },
+      grid: {
+        vertLines: { color: "#27272a" },
+        horzLines: { color: "#27272a" },
+      },
+      crosshair: {
+        mode: 1,
+      },
+      rightPriceScale: {
+        borderColor: "#3f3f46",
+      },
+      timeScale: {
+        borderColor: "#3f3f46",
+        timeVisible: true,
+      },
+      width: chartRef.current.clientWidth,
+      height: 340,
+    });
+
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: "#34d399",
+      downColor: "#f87171",
+      borderUpColor: "#34d399",
+      borderDownColor: "#f87171",
+      wickUpColor: "#34d399",
+      wickDownColor: "#f87171",
+    });
+
+    const formatted = candles.map((c) => ({
+      time: c.time.split("T")[0] as unknown as import("lightweight-charts").Time,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
+
+    candleSeries.setData(formatted);
+    chart.timeScale().fitContent();
+
+    const handleResize = () => {
+      if (chartRef.current) {
+        chart.applyOptions({ width: chartRef.current.clientWidth });
+      }
+    };
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.remove();
+    };
+  }, [candles]);
+
+  return <div ref={chartRef} className="w-full" />;
+}
+
+
 export default function DashboardPage() {
   const { data: session } = useSession();
 
+  const validPeriods = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y"]
+  const validIntervals = ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo", "3mo"]
+
+  const [period, setPeriod] = useState(validPeriods[4]);
+  const [interval, setInterval] = useState(validIntervals[8]);
+
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTicker, setSelectedTicker] = useState<SearchTicker | null>(null);
+  const [selectedTicker, setSelectedTicker] = useState<Omit<SearchTicker, "name"> | null>(null);
 
   const [quote, setQuote] = useState<QuoteType | null>(null);
   const [profile, setProfile] = useState<ProfileType | null>(null);
   const [fundamentals, setFundamentals] = useState<FundamentalsType | null>(null);
   const [indicators, setIndicators] = useState<IndicatorsType | null>(null);
-  const [chartData, setChartData] = useState<ChartDataType | null>(null);
+  const [candles, setCandles] = useState<Candle[]>([]);
   const [news, setNews] = useState<NewsType | null>(null);
 
   const [marketLoading, setMarketLoading] = useState(false);
 
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [newsItems, setNewsItems] = useState<NewsType["news_panel"] | null>(null);
+
+  const displayedNews = isExpanded ? newsItems : newsItems?.slice(0, 5);
+
+  const isInWatchlist = useMemo(() => {
+    if (!selectedTicker) return false;
+
+    return watchlist.some(
+      (item) =>
+        item.symbol === selectedTicker.symbol &&
+        item.exchange === selectedTicker.exchange
+    );
+  }, [watchlist, selectedTicker]);
 
   useEffect(() => {
     async function fetchWatchlist() {
@@ -147,7 +232,7 @@ export default function DashboardPage() {
     };
   }, [search]);
 
-  const handleSelectTicker = async (ticker: SearchTicker) => {
+  const handleSelectTicker = async (ticker: Omit<SearchTicker, "name">) => {
     setSelectedTicker(ticker);
     setSearch("");
     setIsDropdownOpen(false);
@@ -172,14 +257,27 @@ export default function DashboardPage() {
       const indicatorsData = await indicatorsRes.json();
       setIndicators(indicatorsData);
       const chartData = await chartDataRes.json();
-      setChartData(chartData);
+      setCandles(chartData);
       const newsData = await newsRes.json();
       setNews(newsData);
+      const newsItems = newsData.news_panel;
+      setNewsItems(newsItems);
 
     } catch (error) {
       console.error("Failed to select ticker: ", error);
     } finally {
       setMarketLoading(false);
+    }
+  };
+
+  const handleAdd = async (ticker: Omit<SearchTicker, "name">) => {
+    if (!session?.user.id) return;
+    try {
+      await addWatchlistItem(session.user.id, ticker);
+      const data = await getWatchlist(session.user.id);
+      setWatchlist(data);
+    } catch (error) {
+      console.error("Failed to add item: ", error);
     }
   };
 
@@ -195,6 +293,8 @@ export default function DashboardPage() {
 
     try {
       await removeWatchlistItem(session.user.id, symbol, exchange);
+      const data = await getWatchlist(session.user.id);
+      setWatchlist(data);
     } catch (error) {
       console.error("Failed to remove item: ", error);
       const data = await getWatchlist(session.user.id);
@@ -208,7 +308,7 @@ export default function DashboardPage() {
         {/* SIDEBAR */}
         <aside
           className={cn(
-            "fixed flex flex-col inset-y-0 left-0 z-50 w-72 border-r border-border bg-primary-foreground transition-transform duration-300 lg:translate-x-0",
+            "fixed flex flex-col inset-y-0 left-0 z-50 w-72 border-r border-border bg-card transition-transform duration-300 lg:translate-x-0",
             sidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
@@ -266,9 +366,9 @@ export default function DashboardPage() {
                   watchlist.map((item) => (
                     <div
                       key={`${item.symbol}-${item.exchange}`}
-                      className="flex w-full items-center justify-between rounded-lg cursor-pointer border border-border bg-background px-3 py-3 transition hover:border-border-50 hover:bg-background/20"
+                      className={`flex w-full items-center justify-between rounded-lg cursor-pointer border border-border  px-3 py-3 transition hover:border-border-50 ${selectedTicker?.symbol === item.symbol && selectedTicker.exchange === item.exchange ? "bg-card hover:bg-background/50" : "bg-background hover:bg-background/20"}`}
                     >
-                      <button className="flex-1 cursor-pointer">
+                      <button className="flex-1 cursor-pointer" disabled={selectedTicker?.symbol === item.symbol && selectedTicker.exchange === item.exchange} onClick={() => handleSelectTicker(item)}>
                         <div className="text-left">
                           <p className="font-mono text-sm font-semibold">
                             {item.symbol}
@@ -342,19 +442,19 @@ export default function DashboardPage() {
                     }
                   }}
                   placeholder="Search ticker..."
-                  className="h-11 w-full rounded-xl border border-border/50 bg-card pl-10 pr-4 text-sm text-zinc-100 outline-none transition focus:border-zinc-600"
+                  className="h-11 w-full rounded-xl border border-border/50 bg-card pl-10 pr-4 text-sm dark:text-zinc-100 outline-none transition focus:border-zinc-600"
                 />
 
                 {/* REAL-TIME TICKER RESULT DROPDOWN */}
                 {isDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-[105%] bg-background/98 border border-border/50 rounded-xl shadow-2xl max-h-60 overflow-y-auto z-50 divide-y divide-zinc-800/50">
+                  <div className="absolute left-0 right-0 top-[105%] bg-background/98 border border-border/50 rounded-xl shadow-2xl max-h-60 overflow-y-auto z-50 divide-y divide-border">
                     {searchResults.map((ticker) => (
                       <div
                         key={`${ticker.symbol}-${ticker.exchange}`}
                         onClick={() =>
                           handleSelectTicker(ticker)
                         }
-                        className="px-4 py-3 hover:bg-border/40 text-sm font-medium text-zinc-200 hover:text-white cursor-pointer transition-colors flex justify-between items-center"
+                        className="px-4 py-3 hover:bg-border/40 text-sm font-medium dark:text-zinc-200 dark:hover:text-white cursor-pointer transition-colors flex justify-between items-center"
                       >
                         <div className="flex flex-col">
                           <span className="font-mono font-bold tracking-wide">
@@ -373,7 +473,7 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <button className="flex h-11 items-center gap-2 rounded-xl bg-primary-foreground px-4 text-sm transition hover:bg-border/50 cursor-pointer">
+              <button className="flex h-11 items-center gap-2 rounded-xl bg-muted px-4 text-sm transition hover:bg-border/50 cursor-pointer">
                 <RefreshCw className="h-4 w-4" />
                 Refresh
               </button>
@@ -390,7 +490,7 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-6 p-4 md:p-6">
               {/* HERO */}
-              <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
+              <section className="rounded-2xl border border-border bg-card p-6">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <div className="flex items-center gap-3">
@@ -401,6 +501,30 @@ export default function DashboardPage() {
                       <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-400">
                         {news?.meta.ai_signal}
                       </span>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isInWatchlist) {
+                              handleRemove(
+                                selectedTicker!.symbol,
+                                selectedTicker!.exchange
+                              );
+                            } else {
+                              handleAdd(selectedTicker!);
+                            }
+                          }}
+                          className="hover:scale-110 transition-transform"
+                        >
+                          <Star
+                            className={`h-4 w-4 ${isInWatchlist
+                              ? "text-amber-400 fill-amber-400"
+                              : "text-muted-foreground"
+                              }`}
+                          />
+                        </button>
+                      </div>
                     </div>
 
                     <p className="mt-2 text-zinc-400">
@@ -431,7 +555,7 @@ export default function DashboardPage() {
                       </p>
 
                       <p className="text-4xl font-bold">
-                        ${quote?.currency} {quote?.price}
+                        {quote?.currency} {quote?.price}
                       </p>
                     </div>
 
@@ -461,11 +585,8 @@ export default function DashboardPage() {
                 {/* PRICE CHART */}
                 <div className="xl:col-span-3">
                   <Card title="Price Chart">
-                    <div className="flex h-100 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50">
-                      <p className="text-sm text-muted-foreground">
-                        Replace with TradingView / Recharts
-                        / Lightweight Charts
-                      </p>
+                    <div className="flex h-100 items-center justify-center rounded-xl border border-dashed border-border bg-background">
+                      <CandlestickChart candles={candles} indicators={indicators ?? undefined} />
                     </div>
                   </Card>
                 </div>
@@ -484,7 +605,7 @@ export default function DashboardPage() {
                         </p>
                       </div>
 
-                      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+                      <div className="h-2 overflow-hidden rounded-full bg-border">
                         <div
                           className="h-full rounded-full bg-emerald-400"
                           style={{
@@ -510,7 +631,7 @@ export default function DashboardPage() {
                           Risk Score
                         </p>
 
-                        <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+                        <div className="h-2 overflow-hidden rounded-full bg-border">
                           <div
                             className="h-full rounded-full bg-orange-400"
                             style={{
@@ -534,84 +655,42 @@ export default function DashboardPage() {
                   ["Attribution", indicators?.atr],
                   ["Volatility", indicators?.volatility],
                 ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
-                  >
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {label}
-                    </p>
+                  <Metric key={label} label={label!.toString()} value={value} />
 
-                    <p className="mt-3 text-2xl font-bold">
-                      {value}
-                    </p>
-                  </div>
                 ))}
               </section>
 
               <section className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
-                <Metric
-                  label="Market Cap"
-                  value={formatCompact(quote?.marketCap)}
-                />
-
-                <Metric
-                  label="Volume"
-                  value={formatCompact(quote?.volume)}
-                />
-
-                <Metric
-                  label="Avg Volume"
-                  value={formatCompact(quote?.avgVolume)}
-                />
-
-                <Metric
-                  label="Beta"
-                  value={quote?.beta || ""}
-                />
-
-                <Metric
-                  label="52W High"
-                  value={quote?.week52High || ""}
-                />
-
-                <Metric
-                  label="52W Low"
-                  value={quote?.week52Low || ""}
-                />
+                {[
+                  ["Market Cap", formatCompact(quote?.marketCap)],
+                  ["Volume", formatCompact(quote?.volume)],
+                  ["Avg Volume", formatCompact(quote?.avgVolume)],
+                  ["Beta", quote?.beta || ""],
+                  ["52W High", quote?.week52High || ""],
+                  ["52W Low", quote?.week52Low || ""],
+                ].map(([label, value]) => (
+                  <Metric key={label} label={label.toString()} value={value} />
+                ))}
               </section>
 
-              {/* SUMMARY + FEATURES */}
+              {/* SUMMARY + News Analysis */}
               <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 <Card title="AI Summary">
                   <div className="flex items-start gap-3">
                     <BrainCircuit className="mt-1 h-5 w-5 text-violet-400" />
 
-                    <p className="leading-relaxed text-zinc-300">
+                    <p className="leading-relaxed text-muted-foreground">
                       {profile?.businessSummary}
                     </p>
                   </div>
                 </Card>
 
-                <Card title="Feature Attribution">
-                  <div className="space-y-3 text-sm">
-                    <Row label="PE" value={fundamentals?.pe} />
-                    <Row label="Forward PE" value={fundamentals?.forwardPE} />
-                    <Row label="PB" value={fundamentals?.pb} />
-                    <Row label="PEG" value={fundamentals?.peg} />
-                    <Row label="EPS" value={fundamentals?.eps} />
-                    <Row label="ROE" value={fundamentals?.roe} />
-                  </div>              </Card>
-              </section>
-
-              {/* NEWS + BACKTEST */}
-              <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 <Card title="News Sentiment">
                   <div className="space-y-4">
-                    {news?.news_panel?.map((news) => (
+                    {displayedNews!.map((news) => (
                       <div
                         key={news.id}
-                        className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"
+                        className="rounded-xl border border-border bg-background p-4"
                       >
                         <div className="mb-3 flex items-start justify-between gap-3">
                           <p className="text-sm leading-relaxed">
@@ -629,7 +708,7 @@ export default function DashboardPage() {
                                   ? "bg-red-500/10 text-red-400"
                                   : news.sentiment.label.toLowerCase() ===
                                     "neutral"
-                                    ? "bg-zinc-700 text-zinc-300"
+                                    ? "bg-zinc-300 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300"
                                     : "",
                             )}
                           >
@@ -643,17 +722,40 @@ export default function DashboardPage() {
                             {news.source}
                           </div>
 
-                          <span onClick={() => window.open(news.url, "_blank")}>{news.source}</span>
+                          <span onClick={() => window.open(news.url, "_blank")} className="cursor-pointer">{news.source}</span>
                         </div>
                       </div>
                     ))}
+                    {newsItems!.length > 5 && (
+                      <button
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="w-full rounded-xl border border-border bg-background/50 py-2.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-background hover:text-foreground"
+                      >
+                        {isExpanded ? "Show Less" : `Show More`}
+                      </button>
+                    )}
+                  </div>
+                </Card>
+
+              </section>
+
+              {/* Feature + BACKTEST */}
+              <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <Card title="Feature Attribution">
+                  <div className="space-y-3 text-sm">
+                    <Row label="PE" value={fundamentals?.pe} />
+                    <Row label="Forward PE" value={fundamentals?.forwardPE} />
+                    <Row label="PB" value={fundamentals?.pb} />
+                    <Row label="PEG" value={fundamentals?.peg} />
+                    <Row label="EPS" value={fundamentals?.eps} />
+                    <Row label="ROE" value={fundamentals?.roe} />
                   </div>
                 </Card>
 
                 {/*TODO*/}
                 <Card title="Backtest Performance">
                   <div className="space-y-6">
-                    <div className="flex h-55 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50">
+                    <div className="flex h-55 items-center justify-center rounded-xl border border-dashed border-border bg-background/">
                       <p className="text-sm text-muted-foreground">
                         Replace with equity curve chart
                       </p>
@@ -674,9 +776,10 @@ export default function DashboardPage() {
                   </div>
                 </Card>
 
+              </section>
+              <section>
                 <Card title="Company Information">
-
-                  <div className="space-y-4">
+                  <div className="space-y-4 flex justify-start gap-20">
 
                     <div>
                       <p className="text-xs text-muted-foreground">
@@ -735,9 +838,9 @@ interface CardProps {
 
 function Card({ title, children }: CardProps) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
-      <div className="mb-5 flex items-center justify-between">
-        <h3 className="text-sm font-semibold tracking-wide text-zinc-300">
+    <div className="rounded-2xl border border-border bg-card p-6 h-max">
+      <div className={`mb-5 flex items-center justify-between`}>
+        <h3 className="text-sm font-semibold tracking-wide dark:text-zinc-300">
           {title}
         </h3>
       </div>
@@ -754,7 +857,7 @@ interface MetricProps {
 
 function Metric({ label, value }: MetricProps) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <p className="text-xs uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
